@@ -1,0 +1,9 @@
+streamlit
+pandas
+pymupdf
+python-docx
+streamlit
+pandas
+pymupdf
+python-docx
+reportlab
