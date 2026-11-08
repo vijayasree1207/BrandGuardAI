@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# BrandGuard AI exclusions
+venv/
+data/*.db
+__pycache__/
+*.pyc
