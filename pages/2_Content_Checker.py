@@ -3,7 +3,7 @@ import io
 import re
 import json
 import html
-import fitz
+import pymupdf
 
 from docx import Document
 from database import get_connection
@@ -175,9 +175,68 @@ def add_finding(
 # 4. ANALYSIS ENGINE
 # ==================================================
 
-def analyse_content(content, guidelines, brand_voice="Not configured"):
+def analyse_content(content, guidelines, brand_voice="Not configured", approved_facts=None):
+    if approved_facts is None:
+       approved_facts = []
 
     findings = []
+        # ----------------------------------------------
+    # APPROVED BRAND FACT VERIFICATION
+    # ----------------------------------------------
+
+    for fact, source in approved_facts:
+
+        fact_words = re.findall(r"\b[a-zA-Z0-9]+\b", fact.lower())
+
+        if not fact_words:
+            continue
+
+        # Check whether the content contains the approved fact
+        content_lower = content.lower()
+
+        matching_words = [
+            word for word in fact_words
+            if len(word) > 3 and word in content_lower
+        ]
+
+        # Require sufficient overlap before checking contradiction
+        if len(matching_words) >= 3:
+
+            negation_words = [
+                "not", "never", "doesn't", "doesnt",
+                "cannot", "can't", "isn't", "isnt",
+                "no longer"
+            ]
+
+            sentences = re.split(r"(?<=[.!?])\s+", content)
+
+            for sentence in sentences:
+
+                sentence_lower = sentence.lower()
+
+                overlap = sum(
+                    1 for word in matching_words
+                    if word in sentence_lower
+                )
+
+                has_negation = any(
+                    negation in sentence_lower
+                    for negation in negation_words
+                )
+
+                if overlap >= 3 and has_negation:
+
+                    add_finding(
+                        findings,
+                        "Approved Fact Contradiction",
+                        fact,
+                        "High",
+                        f"Potential contradiction against an approved brand fact. Source: {source or 'Not provided'}. Please verify the original source.",
+                        sentence,
+                        "Review this statement against the approved fact and source before publishing.",
+                        content.find(sentence),
+                        content.find(sentence) + len(sentence)
+                    )
     tone_notes = []
         # ----------------------------------------------
     # BRAND VOICE INTELLIGENCE
@@ -981,7 +1040,7 @@ if uploaded_file is not None:
         # Extract PDF content
         if uploaded_file.name.lower().endswith(".pdf"):
 
-            document = fitz.open(
+            document = pymupdf.open(
                 stream=file_bytes,
                 filetype="pdf"
             )
@@ -1089,13 +1148,23 @@ if st.button(
             (selected_brand_id,)
         ).fetchall()
 
+        approved_facts = conn.execute(
+            """
+            SELECT fact, source
+            FROM brand_facts
+            WHERE brand_id = ?
+            """,
+            (selected_brand_id,)
+        ).fetchall()
+
         conn.close()
 
         violations, score, tone_notes = analyse_content(
-        content,
-        guidelines,
-        selected_brand_voice
-)
+            content,
+            guidelines,
+            selected_brand_voice,
+            approved_facts
+        )
 
         st.session_state["analysis"] = {
             "version": 4,

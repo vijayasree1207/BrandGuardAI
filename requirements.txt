@@ -7,3 +7,5 @@ pandas
 pymupdf
 python-docx
 reportlab
+pytesseract
+Pillow

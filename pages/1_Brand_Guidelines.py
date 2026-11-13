@@ -396,6 +396,190 @@ else:
 
     st.info("No guidelines have been added yet.")
 
+# ==========================================
+# APPROVED BRAND FACTS MANAGER
+# ==========================================
+
+st.divider()
+st.subheader("📚 Approved Brand Facts")
+st.write(
+    "Store verified company facts and their sources. "
+    "BrandGuard AI can use these facts to identify possible "
+    "contradictions in submitted content."
+)
+
+if brands:
+
+    fact_brand_options = {
+        brand_id: name
+        for brand_id, name in brands
+    }
+
+    fact_brand_id = st.selectbox(
+        "Select Brand for Approved Facts",
+        list(fact_brand_options.keys()),
+        format_func=lambda x: fact_brand_options[x],
+        key="fact_brand_selector"
+    )
+
+    # ADD APPROVED FACT
+    with st.form("add_brand_fact_form"):
+
+        fact_text = st.text_area(
+            "Approved Brand Fact",
+            placeholder="Example: Our product supports Wi-Fi and Bluetooth."
+        )
+
+        fact_source = st.text_input(
+            "Evidence / Source",
+            placeholder="Example: Official product specification document"
+        )
+
+        save_fact = st.form_submit_button(
+            "💾 Save Approved Fact"
+        )
+
+    if save_fact:
+
+        if not fact_text.strip():
+
+            st.warning("Please enter an approved fact.")
+
+        elif not fact_source.strip():
+
+            st.warning("Please provide the supporting source.")
+
+        else:
+
+            conn = get_connection()
+
+            try:
+
+                existing_fact = conn.execute(
+                    """
+                    SELECT id FROM brand_facts
+                    WHERE brand_id = ?
+                    AND LOWER(TRIM(fact)) = LOWER(TRIM(?))
+                    """,
+                    (fact_brand_id, fact_text.strip())
+                ).fetchone()
+
+                if existing_fact:
+
+                    st.warning("This fact already exists for this brand.")
+
+                else:
+
+                    conn.execute(
+                        """
+                        INSERT INTO brand_facts
+                        (brand_id, fact, source)
+                        VALUES (?, ?, ?)
+                        """,
+                        (
+                            fact_brand_id,
+                            fact_text.strip(),
+                            fact_source.strip()
+                        )
+                    )
+
+                    conn.commit()
+
+                    st.success("Approved brand fact saved successfully!")
+
+            except Exception as error:
+
+                st.error(f"Unable to save fact: {error}")
+
+            finally:
+
+                conn.close()
+
+    # VIEW SAVED FACTS
+    st.divider()
+    st.write("### 📋 Saved Approved Facts")
+
+    conn = get_connection()
+
+    try:
+
+        saved_facts = conn.execute(
+            """
+            SELECT id, fact, source, created_at
+            FROM brand_facts
+            WHERE brand_id = ?
+            ORDER BY id DESC
+            """,
+            (fact_brand_id,)
+        ).fetchall()
+
+    except Exception as error:
+
+        st.error(f"Unable to load approved facts: {error}")
+        saved_facts = []
+
+    finally:
+
+        conn.close()
+
+    if saved_facts:
+
+        for fact_id, fact, source, created_at in saved_facts:
+
+            with st.expander(f"📌 {fact}"):
+
+                st.write("**Approved Fact:**", fact)
+                st.write("**Evidence / Source:**", source)
+                st.caption(f"Added: {created_at}")
+
+                with st.form(key=f"delete_fact_{fact_id}"):
+
+                    confirm_delete = st.checkbox(
+                        "Confirm deletion of this fact."
+                    )
+
+                    delete_fact = st.form_submit_button(
+                        "🗑️ Delete Fact"
+                    )
+
+                if delete_fact:
+
+                    if not confirm_delete:
+
+                        st.warning("Please confirm before deleting.")
+
+                    else:
+
+                        conn = get_connection()
+
+                        try:
+
+                            conn.execute(
+                                "DELETE FROM brand_facts WHERE id = ?",
+                                (fact_id,)
+                            )
+
+                            conn.commit()
+
+                            st.success("Approved fact deleted successfully!")
+
+                        except Exception as error:
+
+                            st.error(f"Unable to delete fact: {error}")
+
+                        finally:
+
+                            conn.close()
+
+    else:
+
+        st.info("No approved facts have been added for this brand yet.")
+
+else:
+
+    st.info("Create a brand first to manage approved facts.")
+
+
 
 # ==========================================
 # FOOTER
